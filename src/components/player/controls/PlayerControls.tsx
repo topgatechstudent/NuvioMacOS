@@ -12,6 +12,7 @@ import { useSettings } from '../../../hooks/useSettings';
 
 import { introService } from '../../../services/introService';
 import { toastService } from '../../../services/toastService';
+import { fullscreenManager } from '../../../utils/fullscreenManager';
 import PlayerAspectRatioIcon from '../../../../assets/player-icons/ic_player_aspect_ratio.svg';
 import PlayerAudioFilledIcon from '../../../../assets/player-icons/ic_player_audio_filled.svg';
 import PlayerAudioOutlineIcon from '../../../../assets/player-icons/ic_player_audio_outline.svg';
@@ -71,6 +72,11 @@ interface PlayerControlsProps {
   onEnterPictureInPicture?: () => void;
   isBuffering?: boolean;
   imdbId?: string;
+  // Mac Catalyst volume control
+  volume?: number;
+  onVolumeChange?: (value: number) => void;
+  onMuteToggle?: () => void;
+  mousePosition?: { x: number; y: number };
 }
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
@@ -120,7 +126,35 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onEnterPictureInPicture,
   isBuffering = false,
   imdbId,
+  volume = 1,
+  onVolumeChange,
+  onMuteToggle,
+  mousePosition,
 }) => {
+  const [showVolumeSlider, setShowVolumeSlider] = React.useState(false);
+  const volumeAreaRef = React.useRef<View>(null);
+  const volumeBoundsRef = React.useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  // Track whether mouse is over the volume button + slider area
+  React.useEffect(() => {
+    if (!mousePosition || !showControls) return;
+    const b = volumeBoundsRef.current;
+    if (b.w === 0) return;
+    // Expand hit area: wider than button, extends up to cover full popup
+    const padding = 12;
+    const inArea =
+      mousePosition.x >= b.x - padding &&
+      mousePosition.x <= b.x + b.w + padding &&
+      mousePosition.y >= b.y - 160 &&
+      mousePosition.y <= b.y + b.h;
+    setShowVolumeSlider(inArea);
+  }, [mousePosition, showControls]);
+
+  const measureVolumeArea = React.useCallback(() => {
+    volumeAreaRef.current?.measureInWindow((x, y, w, h) => {
+      volumeBoundsRef.current = { x, y, w, h };
+    });
+  }, []);
   const { currentTheme } = useTheme();
   const { settings } = useSettings();
   const { t } = useTranslation();
@@ -307,46 +341,43 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       style={[StyleSheet.absoluteFill, { opacity: fadeAnim, zIndex: 20 }]}
       pointerEvents={showControls ? 'box-none' : 'none'}
     >
-      {/* Progress slider with native iOS slider */}
-      <View style={styles.sliderContainer}>
-        <Slider
+      {/* Volume slider popup — rendered at top level to avoid clipping */}
+      {showVolumeSlider && volumeBoundsRef.current.w > 0 && (
+        <View
+          pointerEvents="box-none"
           style={{
-            width: '100%',
-            height: 40,
-            marginHorizontal: 0,
+            position: 'absolute',
+            left: volumeBoundsRef.current.x + (volumeBoundsRef.current.w / 2) - 22,
+            top: volumeBoundsRef.current.y - 150,
+            width: 44,
+            height: 150,
+            zIndex: 100,
+            alignItems: 'center',
+            justifyContent: 'flex-end',
           }}
-          minimumValue={0}
-          maximumValue={duration || 1}
-
-          value={previewTime}
-
-          onValueChange={(v) => setPreviewTime(v)}
-
-          onSlidingStart={() => {
-            isSlidingRef.current = true;
-            onSlidingStart();
-          }}
-
-          onSlidingComplete={(v) => {
-            isSlidingRef.current = false;
-            setPreviewTime(v);
-            onSlidingComplete(v);
-          }}
-
-          minimumTrackTintColor={currentTheme.colors.primary}
-          maximumTrackTintColor={currentTheme.colors.mediumEmphasis}
-          thumbTintColor={Platform.OS === 'android' ? currentTheme.colors.white : undefined}
-          tapToSeek={Platform.OS === 'ios'}
-        />
-        <View style={[styles.timeDisplay, { paddingHorizontal: 14 }]}>
-          <View style={styles.timeContainer}>
-            <Text style={styles.duration}>{formatTime(previewTime)}</Text>
-          </View>
-          <View style={styles.timeContainer}>
-            <Text style={styles.duration}>{formatTime(duration)}</Text>
+        >
+          <View style={{
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            borderRadius: 12,
+            paddingVertical: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 140,
+          }}>
+            <Slider
+              style={{ width: 100, height: 44, transform: [{ rotate: '-90deg' }] }}
+              minimumValue={0}
+              maximumValue={1}
+              value={volume}
+              onValueChange={onVolumeChange}
+              minimumTrackTintColor="#FFFFFF"
+              maximumTrackTintColor="rgba(255,255,255,0.3)"
+              tapToSeek={true}
+            />
           </View>
         </View>
-      </View>
+      )}
 
       {/* Controls Overlay */}
       <View style={styles.controlsContainer}>
@@ -356,16 +387,13 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           style={styles.topGradient}
         >
           <View style={styles.header}>
-            {/* Title Section - Enhanced with metadata */}
             <View style={styles.titleSection}>
               <Text style={styles.title}>{title}</Text>
-              {/* Show season and episode for series */}
               {season && episode && (
                 <Text style={styles.episodeInfo}>
                   S{season}E{episode} {episodeTitle && `• ${episodeTitle}`}
                 </Text>
               )}
-              {/* Show year and provider (quality chip removed) */}
               <View style={styles.metadataRow}>
                 {year && <Text style={styles.metadataText}>{year}</Text>}
                 {streamName && <Text style={styles.providerText}>{t('player_ui.via', { name: streamName })}</Text>}
@@ -377,309 +405,127 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               )}
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* AirPlay Button - iOS only, KSAVPlayer only */}
-              {Platform.OS === 'ios' && onAirPlayPress && playerBackend === 'KSAVPlayer' && (
-                <TouchableOpacity
-                  style={{ padding: 8 }}
-                  onPress={onAirPlayPress}
-                >
-                  <Feather
-                    name="airplay"
-                    size={closeIconSize}
-                    color={isAirPlayActive ? currentTheme.colors.primary : "white"}
-                  />
+              {onAirPlayPress && playerBackend === 'KSAVPlayer' && (
+                <TouchableOpacity style={{ padding: 8 }} onPress={onAirPlayPress} accessibilityRole="button">
+                  <Feather name="airplay" size={closeIconSize} color={isAirPlayActive ? currentTheme.colors.primary : "white"} />
                 </TouchableOpacity>
               )}
-              {/* Switch to MPV Button - Android only, when using ExoPlayer */}
-              {Platform.OS === 'android' && onSwitchToMPV && useExoPlayer && (
-                <TouchableOpacity
-                  style={{ padding: 8 }}
-                  onPress={onSwitchToMPV}
-                >
-                  <Ionicons
-                    name="swap-horizontal"
-                    size={closeIconSize}
-                    color="white"
-                  />
-                </TouchableOpacity>
-              )}
-              {Platform.OS === 'android' && canEnterPictureInPicture && onEnterPictureInPicture && (
-                <TouchableOpacity
-                  style={{ padding: 8 }}
-                  onPress={onEnterPictureInPicture}
-                >
-                  <Feather
-                    name="minimize-2"
-                    size={closeIconSize}
-                    color="white"
-                  />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+              <TouchableOpacity style={styles.closeButton} onPress={handleClose} accessibilityRole="button">
                 <Ionicons name="close" size={closeIconSize} color="white" />
               </TouchableOpacity>
             </View>
           </View>
         </LinearGradient>
 
-
-        {/* Center Controls - CloudStream Style */}
-        <View style={[styles.controls, {
-          transform: [{ translateY: -(playButtonSize / 2) }]
-        }]} pointerEvents="box-none">
-
-          {/* Backward Seek Button (-10s) */}
-          <TouchableOpacity
-            onPress={() => handleSeekWithAnimation(-10)}
-            activeOpacity={0.7}
-          >
-            <Animated.View style={[
-              styles.seekButtonContainer,
-              {
-                width: seekButtonSize,
-                height: seekButtonSize,
-                transform: [{ scale: backwardScaleAnim }]
-              }
-            ]}>
-              <View style={{ transform: [{ scaleX: -1 }] }}>
-                <Ionicons
-                  name="reload-outline"
-                  size={seekIconSize}
-                  color="white"
-                />
-              </View>
-              <Animated.View style={[
-                styles.buttonCircle,
-                {
-                  opacity: backwardPressAnim,
-                  width: seekButtonSize * 0.6,
-                  height: seekButtonSize * 0.6,
-                  borderRadius: (seekButtonSize * 0.6) / 2,
-                }
-              ]} />
-              <View style={[styles.seekNumberContainer, {
-                width: seekButtonSize,
-                height: seekButtonSize,
-              }]}>
-                <Animated.Text style={[
-                  styles.seekNumber,
-                  {
-                    fontSize: seekNumberSize,
-                    marginLeft: 7,
-                    transform: [{ translateX: backwardSlideAnim }]
-                  }
-                ]}>
-                  {showBackwardSign ? '-10' : '10'}
-                </Animated.Text>
-              </View>
-            </Animated.View>
-            <Animated.View style={[
-              styles.arcContainer,
-              {
-                width: seekButtonSize,
-                height: seekButtonSize,
-                opacity: backwardArcOpacity,
-                transform: [{
-                  rotate: backwardArcRotation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['90deg', '-90deg']
-                  })
-                }]
-              }
-            ]}>
-              <View style={[
-                styles.arcLeft,
-                {
-                  width: seekButtonSize,
-                  height: seekButtonSize,
-                  borderRadius: seekButtonSize / 2,
-                  borderWidth: arcBorderWidth,
-                }
-              ]} />
-            </Animated.View>
-          </TouchableOpacity>
-
-          {/* Play/Pause Button */}
-          <TouchableOpacity
-            onPress={handlePlayPauseWithAnimation}
-            activeOpacity={0.7}
-            disabled={isBuffering}
-          >
-            <View style={[styles.playButtonCircle, { width: playButtonSize, height: playButtonSize }]}>
-              <Animated.View style={[
-                styles.playPressCircle,
-                {
-                  opacity: playPressAnim,
-                  width: playButtonSize * 0.85,
-                  height: playButtonSize * 0.85,
-                  borderRadius: (playButtonSize * 0.85) / 2,
-                }
-              ]} />
-              <Animated.View style={{
-                transform: [{ scale: playIconScale }],
-                opacity: playIconOpacity
-              }}>
-                {isBuffering ? (
-                  <ActivityIndicator size="large" color="#FFFFFF" />
-                ) : (
-                  paused ? (
-                    <PlayerPlayIcon width={playIconSizeCalculated} height={playIconSizeCalculated} />
-                  ) : (
-                    <PlayerPauseIcon width={playIconSizeCalculated} height={playIconSizeCalculated} />
-                  )
-                )}
-              </Animated.View>
-            </View>
-          </TouchableOpacity>
-
-          {/* Forward Seek Button (+10s) */}
-          <TouchableOpacity
-            onPress={() => handleSeekWithAnimation(10)}
-            activeOpacity={0.7}
-          >
-            <Animated.View style={[
-              styles.seekButtonContainer,
-              {
-                width: seekButtonSize,
-                height: seekButtonSize,
-                transform: [{ scale: forwardScaleAnim }]
-              }
-            ]}>
-              <Ionicons
-                name="reload-outline"
-                size={seekIconSize}
-                color="white"
-              />
-              <Animated.View style={[
-                styles.buttonCircle,
-                {
-                  opacity: forwardPressAnim,
-                  width: seekButtonSize * 0.6,
-                  height: seekButtonSize * 0.6,
-                  borderRadius: (seekButtonSize * 0.6) / 2,
-                }
-              ]} />
-              <View style={[styles.seekNumberContainer, {
-                width: seekButtonSize,
-                height: seekButtonSize,
-              }]}>
-                <Animated.Text style={[
-                  styles.seekNumber,
-                  {
-                    fontSize: seekNumberSize,
-                    transform: [{ translateX: forwardSlideAnim }]
-                  }
-                ]}>
-                  {showForwardSign ? '+10' : '10'}
-                </Animated.Text>
-              </View>
-              <Animated.View style={[
-                styles.arcContainer,
-                {
-                  width: seekButtonSize,
-                  height: seekButtonSize,
-                },
-                {
-                  opacity: forwardArcOpacity,
-                  transform: [{
-                    rotate: forwardArcRotation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['-90deg', '90deg']
-                    })
-                  }]
-                }
-              ]}>
-                <View style={[
-                  styles.arcRight,
-                  {
-                    width: seekButtonSize,
-                    height: seekButtonSize,
-                    borderRadius: seekButtonSize / 2,
-                    borderWidth: arcBorderWidth,
-                  }
-                ]} />
-              </Animated.View>
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-
-
-
-
-
-        {/* Bottom Gradient */}
+        {/* Bottom Gradient — two-row macOS layout */}
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.bottomGradient}
           pointerEvents="box-none"
         >
-          <View style={styles.bottomControls} pointerEvents="box-none">
-            {/* Center Buttons Container with rounded background - wraps all buttons */}
-            <View style={styles.centerControlsContainer} pointerEvents="box-none">
-              {/* Left Side: Aspect Ratio Button */}
-              <TouchableOpacity style={styles.iconButton} onPress={cycleAspectRatio}>
-                <PlayerAspectRatioIcon width={24} height={24} />
-              </TouchableOpacity>
-
-              {/* Subtitle Button */}
+          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }} pointerEvents="box-none">
+            {/* Row 1: Play/Pause + Seek bar */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setShowSubtitleModal(!isSubtitleModalOpen)}
+                onPress={togglePlayback}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                style={{ width: 36, alignItems: 'center' }}
               >
-                <PlayerSubtitlesIcon width={24} height={24} />
+                {paused ? (
+                  <Ionicons name="play" size={30} color="white" />
+                ) : (
+                  <Ionicons name="pause" size={30} color="white" />
+                )}
+              </TouchableOpacity>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, minWidth: 40 }}>{formatTime(previewTime)}</Text>
+              <View style={{ flex: 1 }}>
+                <Slider
+                  style={{ width: '100%', height: 30 }}
+                  minimumValue={0}
+                  maximumValue={duration || 1}
+                  value={previewTime}
+                  onValueChange={(v) => setPreviewTime(v)}
+                  onSlidingStart={() => {
+                    isSlidingRef.current = true;
+                    onSlidingStart();
+                  }}
+                  onSlidingComplete={(v) => {
+                    isSlidingRef.current = false;
+                    setPreviewTime(v);
+                    onSlidingComplete(v);
+                  }}
+                  minimumTrackTintColor={currentTheme.colors.primary}
+                  maximumTrackTintColor={currentTheme.colors.mediumEmphasis}
+                  tapToSeek={true}
+                />
+              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, minWidth: 40 }}>{formatTime(duration)}</Text>
+            </View>
+
+            {/* Row 2: Utility buttons (centered) */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+              <TouchableOpacity style={styles.iconButton} onPress={cycleAspectRatio} accessibilityRole="button">
+                <PlayerAspectRatioIcon width={22} height={22} />
               </TouchableOpacity>
 
-              {/* Change Source Button */}
+              <TouchableOpacity style={styles.iconButton} onPress={() => setShowSubtitleModal(!isSubtitleModalOpen)} accessibilityRole="button">
+                <PlayerSubtitlesIcon width={22} height={22} />
+              </TouchableOpacity>
+
               {setShowSourcesModal && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={() => setShowSourcesModal(true)}
-                >
-                  <PlayerSourceIcon width={24} height={24} />
+                <TouchableOpacity style={styles.iconButton} onPress={() => setShowSourcesModal(true)} accessibilityRole="button">
+                  <PlayerSourceIcon width={22} height={22} />
                 </TouchableOpacity>
               )}
 
-              {/* Playback Speed Button */}
-              <TouchableOpacity style={styles.iconButton} onPress={() => setShowSpeedModal(true)}>
-                <Ionicons name="speedometer-outline" size={24} color="white" />
+              <TouchableOpacity style={styles.iconButton} onPress={() => setShowSpeedModal(true)} accessibilityRole="button">
+                <Ionicons name="speedometer-outline" size={22} color="white" />
               </TouchableOpacity>
 
-              {/* Audio Button */}
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setShowAudioModal(true)}
                 disabled={ksAudioTracks.length < 1}
+                accessibilityRole="button"
               >
                 {ksAudioTracks.length < 1 ? (
-                  <PlayerAudioOutlineIcon width={24} height={24} opacity={0.55} />
+                  <PlayerAudioOutlineIcon width={22} height={22} opacity={0.55} />
                 ) : (
-                  <PlayerAudioFilledIcon width={24} height={24} />
+                  <PlayerAudioFilledIcon width={22} height={22} />
                 )}
               </TouchableOpacity>
 
-              {/* Submit Intro Button */}
               {season !== undefined && episode !== undefined && settings.introSubmitEnabled && settings.introDbApiKey && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={handleIntroPress}
-                >
-                  <Ionicons
-                    name="flag-outline"
-                    size={24}
-                    color="white"
-                  />
+                <TouchableOpacity style={styles.iconButton} onPress={handleIntroPress} accessibilityRole="button">
+                  <Ionicons name="flag-outline" size={22} color="white" />
                 </TouchableOpacity>
               )}
 
-              {/* Right Side: Episodes Button */}
               {setShowEpisodesModal && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={() => setShowEpisodesModal(true)}
-                >
-                  <PlayerEpisodesIcon width={24} height={24} />
+                <TouchableOpacity style={styles.iconButton} onPress={() => setShowEpisodesModal(true)} accessibilityRole="button">
+                  <PlayerEpisodesIcon width={22} height={22} />
                 </TouchableOpacity>
               )}
+
+              {/* Volume button — hover to show slider, click to mute */}
+              <View
+                ref={volumeAreaRef}
+                onLayout={measureVolumeArea}
+                style={{ position: 'relative', alignItems: 'center' }}
+              >
+                <TouchableOpacity style={styles.iconButton} onPress={onMuteToggle} accessibilityRole="button">
+                  <Ionicons
+                    name={volume === 0 ? 'volume-mute' : volume < 0.5 ? 'volume-low' : 'volume-high'}
+                    size={22}
+                    color="white"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.iconButton} onPress={() => fullscreenManager.toggleFullscreen()} accessibilityRole="button">
+                <Feather name="maximize" size={20} color="white" />
+              </TouchableOpacity>
             </View>
           </View>
         </LinearGradient>

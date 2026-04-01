@@ -48,6 +48,7 @@ import { ToastProvider } from './src/contexts/ToastContext';
 import { mmkvStorage } from './src/services/mmkvStorage';
 import { CampaignManager } from './src/components/promotions/CampaignManager';
 import { isErrorReportingEnabledSync } from './src/services/telemetryService';
+import { fullscreenManager } from './src/utils/fullscreenManager';
 import { supabaseSyncService } from './src/services/supabaseSyncService';
 
 // Initialize Sentry with privacy-first defaults
@@ -236,6 +237,15 @@ const ThemedApp = () => {
   // Navigation reference
   const navigationRef = React.useRef<any>(null);
 
+  // Mac Catalyst: Hide toolbar (tab bar) when not on MainTabs
+  const handleNavigationStateChange = React.useCallback(() => {
+    if (!fullscreenManager.isMacCatalyst || !navigationRef.current) return;
+    const currentRoute = navigationRef.current.getCurrentRoute();
+    const mainTabScreens = ['Home', 'Library', 'Search', 'Downloads', 'Settings'];
+    const isOnMainTabs = currentRoute && mainTabScreens.includes(currentRoute.name);
+    fullscreenManager.setToolbarVisible(isOnMainTabs);
+  }, []);
+
   // Don't render anything until we know the onboarding status
   const shouldShowApp = isAppReady && hasCompletedOnboarding !== null;
   const initialRouteName = hasCompletedOnboarding ? 'MainTabs' : 'Onboarding';
@@ -246,6 +256,7 @@ const ThemedApp = () => {
         <NavigationContainer
           ref={navigationRef}
           theme={customNavigationTheme}
+          onStateChange={handleNavigationStateChange}
           linking={{
             prefixes: ['nuvio://'],
             config: {

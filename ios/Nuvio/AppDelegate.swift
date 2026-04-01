@@ -46,6 +46,32 @@ public class AppDelegate: ExpoAppDelegate {
       launchOptions: launchOptions)
 #endif
 
+    #if targetEnvironment(macCatalyst)
+    // Configure transparent title bar so content extends underneath
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+         let titlebar = scene.titlebar {
+        titlebar.titleVisibility = .hidden
+        titlebar.separatorStyle = .none
+      }
+      // Access NSWindow to set transparent titlebar + fullSizeContentView
+      if let nsApp = NSClassFromString("NSApplication"),
+         let sharedApp = nsApp.value(forKeyPath: "sharedApplication") as? AnyObject,
+         let nsWindows = sharedApp.value(forKeyPath: "windows") as? [AnyObject] {
+        for nsWindow in nsWindows {
+          if let uiWindows = nsWindow.value(forKeyPath: "uiWindows") as? [UIWindow],
+             !uiWindows.isEmpty {
+            nsWindow.setValue(true, forKey: "titlebarAppearsTransparent")
+            if let styleMask = nsWindow.value(forKey: "styleMask") as? UInt {
+              nsWindow.setValue(styleMask | (1 << 15), forKey: "styleMask")
+            }
+            break
+          }
+        }
+      }
+    }
+    #endif
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

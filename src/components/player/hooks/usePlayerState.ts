@@ -67,7 +67,7 @@ export const usePlayerState = () => {
         resizeMode, setResizeMode,
         videoAspectRatio, setVideoAspectRatio,
         is16by9Content, setIs16by9Content,
-        screenDimensions, setScreenDimensions,
+        screenDimensions: effectiveDimensions, setScreenDimensions,
         zoomScale, setZoomScale,
         zoomTranslateX, setZoomTranslateX,
         zoomTranslateY, setZoomTranslateY,

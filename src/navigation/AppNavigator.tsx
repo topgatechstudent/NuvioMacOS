@@ -19,6 +19,7 @@ import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import { ScrollToTopProvider, useScrollToTopEmitter } from '../contexts/ScrollToTopContext';
 import { telemetryService, TELEMETRY_EVENTS } from '../services/telemetryService';
 import { useTranslation } from 'react-i18next';
+import { fullscreenManager } from '../utils/fullscreenManager';
 
 // Optional iOS Glass effect (expo-glass-effect) with safe fallback
 let GlassViewComp: any = null;
@@ -750,7 +751,7 @@ const MainTabs = () => {
                   }}
                 >
                   <Text style={{
-                    color: isFocused ? currentTheme.colors.primary : currentTheme.colors.white,
+                    color: currentTheme.colors.white,
                     fontWeight: '700',
                     fontSize: 14,
                     letterSpacing: 0.2,
@@ -928,7 +929,8 @@ const MainTabs = () => {
   };
 
   // iOS: Use native bottom tabs (@bottom-tabs/react-navigation)
-  if (Platform.OS === 'ios') {
+  // Skip native tabs on Mac Catalyst — they render in the title bar and force it inline
+  if (Platform.OS === 'ios' && !fullscreenManager.isMacCatalyst) {
     // Dynamically require to avoid impacting Android bundle
     const { createNativeBottomTabNavigator } = require('@bottom-tabs/react-navigation');
     const IOSTab = createNativeBottomTabNavigator();
@@ -1242,6 +1244,16 @@ const InnerNavigator = ({ initialRouteName }: { initialRouteName?: keyof RootSta
     }
   }, []);
 
+  // Mac Catalyst: Make title bar transparent and enable pointer cursors on buttons
+  useEffect(() => {
+    if (fullscreenManager.isMacCatalyst) {
+      setTimeout(() => {
+        fullscreenManager.setupTransparentTitlebar();
+        fullscreenManager.enablePointerCursors();
+      }, 500);
+    }
+  }, []);
+
   return (
     <>
       <StatusBar
@@ -1338,12 +1350,12 @@ const InnerNavigator = ({ initialRouteName }: { initialRouteName?: keyof RootSta
               name="Streams"
               component={StreamsScreen as any}
               options={{
-                headerShown: false,
-                animation: Platform.OS === 'ios' ? 'slide_from_bottom' : 'fade',
-                animationDuration: Platform.OS === 'android' ? 200 : 300,
+                headerShown: true,
+                animation: 'slide_from_bottom',
+                animationDuration: 300,
                 gestureEnabled: true,
-                gestureDirection: Platform.OS === 'ios' ? 'vertical' : 'horizontal',
-                ...(Platform.OS === 'ios' && { presentation: 'modal' }),
+                gestureDirection: 'vertical',
+                presentation: 'card',
                 contentStyle: {
                   backgroundColor: currentTheme.colors.darkBackground,
                 },
@@ -1355,10 +1367,10 @@ const InnerNavigator = ({ initialRouteName }: { initialRouteName?: keyof RootSta
               name="PlayerIOS"
               component={KSPlayerCore as any}
               options={{
+                headerShown: false,
                 animation: 'default',
                 animationDuration: 0,
-                // fullScreenModal required for proper video rendering on iOS
-                presentation: 'fullScreenModal',
+                presentation: 'card',
                 // Disable gestures during video playback
                 gestureEnabled: false,
                 // Ensure proper orientation handling
@@ -1366,9 +1378,7 @@ const InnerNavigator = ({ initialRouteName }: { initialRouteName?: keyof RootSta
                 contentStyle: {
                   backgroundColor: '#000000', // Pure black for video player
                 },
-                // iPad-specific fullscreen options
-                statusBarHidden: true,
-                statusBarAnimation: 'none',
+                // Status bar not applicable on Mac Catalyst
                 // Freeze when blurred to release resources safely
                 freezeOnBlur: true,
               }}

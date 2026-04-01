@@ -18,6 +18,8 @@
 		DCD40879DF68AC92E270497B /* libPods-Nuvio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 82C0DE761492F556FCDC668B /* libPods-Nuvio.a */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F32636E0236325F8C2AB77B7 /* KSPlayerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 659DBB9AE421326E0765146B /* KSPlayerModule.swift */; };
+		A1B2C3D4E5F607080910ABCD /* FullscreenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F607080910AB01 /* FullscreenManager.swift */; };
+		A1B2C3D4E5F607080910ABCE /* FullscreenManagerBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F607080910AB02 /* FullscreenManagerBridge.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -58,6 +60,8 @@
 		C63E404CF0444243A1A4848D /* LiveActivity.entitlements */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; path = LiveActivity.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EFB6B36EB7094A552FCEC6F2 /* KSPlayerManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = KSPlayerManager.m; path = ../KSPlayer/RNBridge/KSPlayerManager.m; sourceTree = "<group>"; };
+		A1B2C3D4E5F607080910AB01 /* FullscreenManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FullscreenManager.swift; path = Nuvio/FullscreenManager.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F607080910AB02 /* FullscreenManagerBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FullscreenManagerBridge.m; path = Nuvio/FullscreenManagerBridge.m; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Nuvio/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Nuvio-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Nuvio-Bridging-Header.h"; path = "Nuvio/Nuvio-Bridging-Header.h"; sourceTree = "<group>"; };
 		F55232554C6E44E2B378E07B /* LiveActivityView.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; path = LiveActivityView.swift; sourceTree = "<group>"; };
@@ -91,6 +95,8 @@
 				659DBB9AE421326E0765146B /* KSPlayerModule.swift */,
 				989BE873247CC4E1985D4270 /* KSPlayerView.swift */,
 				993B48A9DE29F32CFC8B8415 /* KSPlayerViewManager.swift */,
+				A1B2C3D4E5F607080910AB01 /* FullscreenManager.swift */,
+				A1B2C3D4E5F607080910AB02 /* FullscreenManagerBridge.m */,
 			);
 			name = Nuvio;
 			sourceTree = "<group>";
@@ -468,6 +474,8 @@
 				F32636E0236325F8C2AB77B7 /* KSPlayerModule.swift in Sources */,
 				D224B2EC273053398EBDC24B /* KSPlayerView.swift in Sources */,
 				B22D170B7109D77E77A1D5DC /* KSPlayerViewManager.swift in Sources */,
+				A1B2C3D4E5F607080910ABCD /* FullscreenManager.swift in Sources */,
+				A1B2C3D4E5F607080910ABCE /* FullscreenManagerBridge.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, StatusBar, StyleSheet, Animated, Dimensions, ActivityIndicator } from 'react-native';
+import { View, StatusBar, StyleSheet, Animated, Dimensions } from 'react-native';
+import LoadingSpinner from '../LoadingSpinner';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -48,6 +49,7 @@ import { useTraktAutosync } from '../../hooks/useTraktAutosync';
 import { useMetadata } from '../../hooks/useMetadata';
 import { usePlayerGestureControls } from '../../hooks/usePlayerGestureControls';
 import stremioService from '../../services/stremioService';
+import { fullscreenManager } from '../../utils/fullscreenManager';
 import { storageService } from '../../services/storageService';
 import { logger } from '../../utils/logger';
 
@@ -282,6 +284,7 @@ const KSPlayerCore: React.FC = () => {
   // Gestures
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
+
   // Controls timeout
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
   const hideControls = useCallback(() => {
@@ -298,8 +301,105 @@ const KSPlayerCore: React.FC = () => {
   const [volume, setVolumeState] = useState(1.0);
   const [brightness, setBrightnessState] = useState(0.5);
   const [isSliderDragging, setIsSliderDragging] = useState(false);
+  const volumeBeforeMute = useRef(1.0);
 
-  // Shared Gesture Hook
+  // Mute toggle for macOS volume button
+  const handleMuteToggle = useCallback(() => {
+    if (volume > 0) {
+      volumeBeforeMute.current = volume;
+      setVolumeState(0);
+    } else {
+      setVolumeState(volumeBeforeMute.current || 1.0);
+    }
+  }, [volume]);
+
+  // Native mouse move monitor — shows controls + cursor on mouse movement
+  const showControlsRef = useRef(showControls);
+  showControlsRef.current = showControls;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  const lastMousePos = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    fullscreenManager.startMouseMonitor();
+    fullscreenManager.startKeyMonitor();
+    const unsub = fullscreenManager.onMouseMove((coords) => {
+      // Only react if mouse actually moved (hover events fire continuously)
+      const dx = Math.abs(coords.x - lastMousePos.current.x);
+      const dy = Math.abs(coords.y - lastMousePos.current.y);
+      if (dx < 2 && dy < 2) return;
+      lastMousePos.current = coords;
+
+      setMousePosition(coords);
+      if (!showControlsRef.current) {
+        setShowControls(true);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+      if (controlsTimeout.current) {
+        clearTimeout(controlsTimeout.current);
+      }
+      if (!pausedRef.current) {
+        controlsTimeout.current = setTimeout(() => {
+          hideControls();
+          fullscreenManager.setCursorVisible(false);
+        }, 3000);
+      }
+    });
+    return () => {
+      unsub();
+      fullscreenManager.stopMouseMonitor();
+      fullscreenManager.stopKeyMonitor();
+      fullscreenManager.setCursorVisible(true);
+    };
+  }, [fadeAnim, setShowControls, hideControls]);
+
+  // Briefly show controls then auto-hide (used by all key handlers)
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+    controlsTimeout.current = setTimeout(() => {
+      hideControls();
+      fullscreenManager.setCursorVisible(false);
+    }, 2500);
+  }, [setShowControls, fadeAnim, hideControls]);
+
+  // Spacebar toggles play/pause and shows controls
+  useEffect(() => {
+    const unsub = fullscreenManager.onSpaceBar(() => {
+      controls.togglePlayback();
+      showControlsTemporarily();
+    });
+    return unsub;
+  }, [controls, showControlsTemporarily]);
+
+  // Arrow keys: left/right = seek ±10s, up/down = volume ±10%
+  // Don't show/hide cursor — keep it as-is
+  useEffect(() => {
+    const unsub = fullscreenManager.onKeyPress((key) => {
+      if (key === 'left') {
+        controls.seekToTime(Math.max(0, currentTime - 10));
+        showControlsTemporarily();
+      } else if (key === 'right') {
+        controls.seekToTime(Math.min(duration, currentTime + 10));
+        showControlsTemporarily();
+      } else if (key === 'up') {
+        setVolumeState(v => Math.min(1, v + 0.1));
+        showControlsTemporarily();
+      } else if (key === 'down') {
+        setVolumeState(v => Math.max(0, v - 0.1));
+        showControlsTemporarily();
+      }
+    });
+    return unsub;
+  }, [controls, currentTime, duration, showControlsTemporarily]);
+
   const gestureControls = usePlayerGestureControls({
     volume: volume,
     setVolume: (v) => setVolumeState(v),
@@ -651,6 +751,7 @@ const KSPlayerCore: React.FC = () => {
     if (isSyncingBeforeClose.current) return;
     isSyncingBeforeClose.current = true;
 
+    fullscreenManager.setCursorVisible(true);
     traktAutosync.handlePlaybackEnd(currentTime, duration, 'user_close');
 
     navigation.goBack();
@@ -893,7 +994,7 @@ const KSPlayerCore: React.FC = () => {
         controlsFixedOffset={106}
       />
 
-      {/* Gesture Controls Overlay (Pan/Tap) */}
+      {/* Gesture Controls — horizontal seek, long-press speed boost, center click play/pause */}
       <GestureControls
         screenDimensions={screenDimensions}
         gestureControls={gestureControls}
@@ -907,20 +1008,21 @@ const KSPlayerCore: React.FC = () => {
         brightness={brightness}
         controlsTimeout={controlsTimeout}
         resizeMode={resizeMode}
-        skip={controls.skip}
         currentTime={currentTime}
         duration={duration}
         seekToTime={controls.seekToTime}
         formatTime={formatTime}
+        togglePlayback={controls.togglePlayback}
+        paused={paused}
       />
 
       {/* UI Controls */}
       {isVideoLoaded && (
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-          {/* Buffering Indicator (Visible when controls are hidden) */}
-          {isBuffering && !showControls && (
+          {/* Buffering Indicator — centered spinner, same size as play/pause animation */}
+          {isBuffering && (
             <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', zIndex: 15 }]}>
-              <ActivityIndicator size="large" color="#FFFFFF" />
+              <LoadingSpinner size={70} color="#FFFFFF" />
             </View>
           )}
 
@@ -947,18 +1049,13 @@ const KSPlayerCore: React.FC = () => {
             skip={controls.skip}
             handleClose={handleClose}
             cycleAspectRatio={() => {
-              gestureControls.showResizeModeOverlayFn(() => {
-                setResizeMode(prev => {
-                  switch (prev) {
-                    case 'contain':
-                      return 'cover';
-                    case 'cover':
-                      return 'stretch';
-                    case 'stretch':
-                    default:
-                      return 'contain';
-                  }
-                });
+              setResizeMode(prev => {
+                switch (prev) {
+                  case 'contain': return 'cover';
+                  case 'cover': return 'stretch';
+                  case 'stretch':
+                  default: return 'contain';
+                }
               });
             }}
             cyclePlaybackSpeed={() => speedControl.setPlaybackSpeed(speedControl.playbackSpeed >= 2 ? 1 : speedControl.playbackSpeed + 0.25)}
@@ -981,6 +1078,10 @@ const KSPlayerCore: React.FC = () => {
             onAirPlayPress={() => ksPlayerRef.current?.showAirPlayPicker()}
             isBuffering={isBuffering}
             imdbId={imdbId}
+            volume={volume}
+            onVolumeChange={(v) => setVolumeState(v)}
+            onMuteToggle={handleMuteToggle}
+            mousePosition={mousePosition}
           />
         </View>
       )}
