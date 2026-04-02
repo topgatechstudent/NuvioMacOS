@@ -1,4 +1,11 @@
-Native MacOS port of Nuvio built using Mac Catalyst. The project is still in the early stages with the majority of development time spent on getting the application to build. 
-The KSPlayer video player UI has been optimized for desktop. Other parts of the app UI have also been optimized for desktop, but the focus was put on the video player.
-Download the latest release from [Github Releases](https://github.com/topgatechstudent/NuvioMacOS/releases/tag/pre-release). Features that are currently not working are listed in the release description. 
-Feel free to report any bugs. 
+Native macOS port of Nuvio built with Mac Catalyst.
+
+This project is still in its early stages. Most of the development effort so far has gone into getting the application to build successfully.
+
+The KSPlayer video player UI has been optimized for desktop use. Other parts of the app have also been adapted for desktop, but the main focus so far has been the video player experience.
+
+Download the latest release from [GitHub Releases](https://github.com/topgatechstudent/NuvioMacOS/releases/tag/pre-release).
+
+A list of features that are not currently working is included in the release description.
+
+Bug reports are welcome.
